@@ -1,0 +1,88 @@
+---
+title: "EI Tutorial"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{my-vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(eiCompare)
+```
+
+## The Data
+
+
+
+```{r}
+data("corona")
+corona[, 3:ncol(corona)] <- round(corona[, 3:ncol(corona)] * corona$totvote)
+head(corona)
+```
+
+```{r}
+dedupe_precincts <- function(data, precinct_id, verbose = TRUE) {
+
+  # Remove any fully duplicated rows
+  init_rows <- nrow(data)
+  data <- unique(data)
+  rows <- nrow(data)
+  rows_removed <- init_rows - rows
+  if (rows_removed != 0 & verbose) {
+    message(paste("Removing", rows_removed, "identical rows..."))
+  }
+
+  # Check for duplicate precincts
+  # Check both directions to get every duplicate
+  dupes <- duplicated(data[, precinct_id]) | duplicated(data[, precinct_id],
+    fromLast = TRUE
+  )
+
+  # If duplicates found, add boolean column identifying them
+  if (sum(dupes) != 0 & verbose) {
+    warning("Precincts appear duplicated. Returning boolean column identifying
+duplicates...")
+    data$duplicate <- dupes
+  }
+
+  if (rows_removed == 0 & sum(dupes == 0) & verbose) {
+    message("Data does not contain duplicates. Proceed...")
+  }
+
+  return(data)
+}
+
+corona <- dedupe_precincts(corona, "precinct")
+```
+
+```{r}
+race_cols <- c("pct_hisp", "pct_non_lat")
+cand_cols <- c("pct_husted", "pct_spiegel", "pct_ruth", "pct_button", "pct_montanez", "pct_fox")
+
+corona_for_ei <- stdize_votes_all(
+  data = corona,
+  race_cols = race_cols,
+  cand_cols = cand_cols,
+  totals_from = "cand"
+)
+head(corona_for_ei)
+```
+```{r}
+race_cols <- paste0(race_cols, "_prop")
+cand_cols <- paste0(cand_cols, "_prop")
+ei <- ei_iter(
+  data = corona_for_ei,
+  race_cols = race_cols,
+  cand_cols = cand_cols,
+  totals = "total"
+)
+ei
+```

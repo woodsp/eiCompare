@@ -1,5 +1,5 @@
 ---
-title: "my-vignette"
+title: "EI Tutorial"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{my-vignette}
@@ -16,4 +16,22 @@ knitr::opts_chunk$set(
 
 ```{r setup}
 library(eiCompare)
+```
+
+```{r}
+data("corona")
+corona[, 3:ncol(corona)] <- round(corona[, 3:ncol(corona)] * corona$totvote)
+head(corona)
+```
+
+```{r}
+race_cols <- c("pct_hisp", "pct_non_lat")
+cand_cols <- c("pct_husted", "pct_spiegel", "pct_ruth", "pct_button", "pct_montanez", "pct_fox")
+
+corona_for_ei <- stdize_votes_all(
+  data = corona,
+  race_cols = race_cols,
+  cand_cols = cand_cols,
+  totals_from = "cand"
+)
 ```
