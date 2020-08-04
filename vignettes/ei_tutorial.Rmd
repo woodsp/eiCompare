@@ -1,5 +1,5 @@
 ---
-title: "eiCompare: Doing Ecological Inference"
+title: "eiCompare: Ecological Inference"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{my-vignette}
@@ -7,53 +7,62 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-Ecological Inference (EI) is a tool for estimating 
+This vignette illustrates how we can use the Ecological Inference (EI) tools 
+within `eiCompare` to learn about the voting behavior of different groups of 
+voters. 
+
+## The ecological inference problem
+
+Ecological Inference involves estimating the voting behaviors of different 
+groups of voters using only data about election results and the number of people
+from each group that turned out to vote. Elections in the United States, and 
+much of the rest of the world, use secret
+ballots that ensure confidentiality for every voter. Voter 
+confidentiality is important for a functioning democracy, but it presents a 
+problem for the study of voter behavior. We cannot directly measure how people
+vote in an election. Intead, we have to make inferences about how people vote 
+using election results and information about voter turnout. We often end up with
+datasets like this one, which contains aggregate election results and turnout 
+information for each election precinct in Orange County, Florida:
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-```
 
-```{r, include = FALSE}
 library(eiCompare)
-```
 
-## The Data
-
-
-
-```{r}
-data("corona")
-corona[, 3:ncol(corona)] <- round(corona[, 3:ncol(corona)] * corona$totvote)
-head(corona)
+path <- "/home/jovyan/shared/week_1_2/"
+file <- paste0(path, "oc_florida_2006_schoolboard.csv")
+oc <- read.csv(file)
+oc <- oc %>% dplyr::select(-totalvote)
+names(oc)[5:7] <- c("white", "latino", "black")
 ```
 
 ```{r}
-# corona <- dedupe_precincts(corona, "precinct")
+head(oc)
 ```
 
-```{r}
-race_cols <- c("pct_hisp", "pct_non_lat")
-cand_cols <- c("pct_husted", "pct_spiegel", "pct_ruth", "pct_button", "pct_montanez", "pct_fox")
+This dataset contains the following columns:
 
-corona_for_ei <- stdize_votes_all(
-  data = corona,
-  race_cols = race_cols,
-  cand_cols = cand_cols,
-  totals_from = "cand"
-)
-head(corona_for_ei)
-```
+- `precinct` - This uniquely identifies each precinct in the county.
+- `cardona`, `flynn`, `kelly` - These indicate the number of votes cast 
+for each of the candidates in the election.
+- `white`, `latino`, `black` - These indicate the number of voters who 
+turned out to each precinct identifying with these racial groups.
+
+Whereas the votes cast by individuals cannot be measured, these aggregate 
+measures are readily available. Official organizations across the United States 
+publish election results data. Getting the number of people identifying with 
+each race category can be more complicated. For tutorials on how to estimate the 
+racial demographics of voters, see the vignette on 
+[Bayesian Improved Surname Geocoding](BISG.com).
+
+From here we can begin conducting ecological inference.
+
 ```{r}
-race_cols <- paste0(race_cols, "_prop")
-cand_cols <- paste0(cand_cols, "_prop")
-ei <- ei_iter(
-  data = corona_for_ei,
-  race_cols = race_cols,
-  cand_cols = cand_cols,
-  totals = "total"
-)
-ei
+nrow(oc)
 ```
+
+We have this information for the forty four precincts in the county. 
