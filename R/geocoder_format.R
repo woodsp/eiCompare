@@ -15,13 +15,37 @@
 #' @importFrom stringr for character manipulation and pattern matching functions
 #'
 
-geocode_format <- function(voter_file = ram,
+geocode_format <- function(voter_file,
                            voter_id = "voter_id",
                            street_number = "street_number",
                            street_name = "street_name",
+                           street_suffix = "street_suffix",
                            city = "city",
                            state = "GA",
                            zipcode = "residence_zipcode") {
+
+
+  # Create a new column for street that matches the values for street name only
+  voter_file$street <- NA
+  voter_file$street <- voter_file[street_name]
+
+  # Check if there is a street number and a street name that exists. If yes, concatenate street variables.
+  if (any(colnames(voter_file) == street_number) & any(colnames(test_file) == street_name)) {
+    voter_file$street <- paste0(voter_file[[street_number]],
+      voter_file[[street_name]],
+      sep = " "
+    )
+  }
+  # Check if there is a street number, street name, and street_suffix exists. If yes, concatenate street variables.
+  if (any(colnames(voter_file) == street_number)
+  & any(colnames(test_file) == street_name)
+  & any(colnames(test_file) == street_suffix)) {
+    voter_file$street <- paste0(voter_file[[street_number]],
+      voter_file[[street_name]],
+      voter_file[[street_suffix]],
+      sep = " "
+    )
+  }
 
   # Convert each variable as a character.
   voter_file[[zipcode]] <- as.character(voter_file[[zipcode]])
