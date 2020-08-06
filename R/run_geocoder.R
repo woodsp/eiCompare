@@ -19,6 +19,9 @@
 #'
 #' @export voter_file
 #' @importFrom data.table dataframe manipulation
+#' @importFrom foreach iterates over elements or obervations
+#' @importFrom parallel helps run large computations for parallel processing
+#' @importFrom doParallel helps run large computations for parallel processing
 #' @importFrom censusxy The US Census Geocoder API https://cran.r-project.org/web/packages/censusxy/index.html
 #' @importFrom opencage The commercial geocoder, Opencage that returns latitude and longitude vaues. https://opencagedata.com/
 #'
