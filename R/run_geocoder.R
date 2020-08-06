@@ -1,4 +1,4 @@
-#' Pre-processes voter file by checking zipcode, and any special characters or typos within the address.
+#' Geocoding voter file addresses with coordinates (latitude and longitude) and/or census geographies.
 #'
 #'
 #' @param voter_file A voter file containing the address of the voter.
