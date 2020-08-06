@@ -31,6 +31,7 @@ run_geocoder <- function(voter_file,
                          city = "city",
                          state = "GA",
                          zipcode = "residence_zipcode",
+                         country = NULL,
                          census_return = NULL,
                          census_benchmark = "Public_AR_Current",
                          census_vintage = 4,
@@ -77,9 +78,9 @@ run_geocoder <- function(voter_file,
 
     # Creates lists of dataframes that holds voter data in batches of 10000
     for (i in 1:n_loops) {
-      df <- ga_gwin_fulton[start_row:stop_row, ]
+      df <- voterf_file[start_row:stop_row, ]
       if (start_row == last_row_start) {
-        df <- ga_gwin_fulton[last_row_start:last_row_stop, ]
+        df <- voter_file[last_row_start:last_row_stop, ]
       }
       dfList <- append(dfList, list(df))
       start_row <- stop_row + 1
@@ -131,7 +132,7 @@ run_geocoder <- function(voter_file,
         {
           opencage_latlon <- opencage_forward(
             placename = voter_file$opencage_address[m],
-            country = "US",
+            country = NULL,
             key = opencage_key
           )
           voter_file$lon[m] <- opencage_latlon$results$geometry.lng[1]
