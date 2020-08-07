@@ -16,53 +16,115 @@ voters.
 Ecological Inference involves estimating the voting behaviors of different 
 groups of voters using only data about election results and the number of people
 from each group that turned out to vote. Elections in the United States, and 
-much of the rest of the world, use secret
-ballots that ensure confidentiality for every voter. Voter 
-confidentiality is important for a functioning democracy, but it presents a 
-problem for the study of voter behavior. We cannot directly measure how people
-vote in an election. Intead, we have to make inferences about how people vote 
+much of the rest of the world, use secret ballots that ensure confidentiality 
+for every voter. Voter confidentiality is important for a functioning democracy, 
+but it presents a problem for those who want to learn about voter behavior. We cannot directly 
+measure how people vote in an election. Intead, we have to make inferences about how they might have voted 
 using election results and information about voter turnout. We often end up with
-datasets like this one, which contains aggregate election results and turnout 
-information for each election precinct in Orange County, Florida:
+datasets like the following, which contains aggregate election results and turnout 
+information for each election precinct in Gwinnett County, Georgia:
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-
-library(eiCompare)
-
-path <- "/home/jovyan/shared/week_1_2/"
-file <- paste0(path, "oc_florida_2006_schoolboard.csv")
-oc <- read.csv(file)
-oc <- oc %>% dplyr::select(-totalvote)
-names(oc)[5:7] <- c("white", "latino", "black")
 ```
 
 ```{r}
-head(oc)
+library(eiCompare)
+
+data("gwinnett")
+head(gwinnett)
 ```
 
 This dataset contains the following columns:
 
 - `precinct` - This uniquely identifies each precinct in the county.
-- `cardona`, `flynn`, `kelly` - These indicate the number of votes cast 
-for each of the candidates in the election.
-- `white`, `latino`, `black` - These indicate the number of voters who 
-turned out to each precinct identifying with these racial groups.
+- `turnout` - The total number of voters who cast ballots on election day
+- `kemp`, `abrams`, `metz` - These count the number of votes cast for each
+candidate.
+- `white`, `black`, `hispanic`, `other` - These count the number of voters who
+self-reported as each race group.
 
-Whereas the votes cast by individuals cannot be measured, these aggregate 
-measures are readily available. Official organizations across the United States 
-publish election results data. Getting the number of people identifying with 
-each race category can be more complicated. For tutorials on how to estimate the 
-racial demographics of voters, see the vignette on 
-[Bayesian Improved Surname Geocoding](BISG.com).
+Election results by precinct are generally accessible online from election 
+administrators. Measuring the turnout of different racial/ethnic groups, 
+however, can present more of a challenge. Luckily, the state of Georgia requires
+voters to self-report their race when they register. This means anyone can 
+tabulate the number of voters self-reporting with each group in each precinct, 
+provided they gain access to a voter file. That's exactly what we've done here.
+To learn more about how to estimate voters' race based only on their name and 
+address, see the tutorials on [Geocoding voter files](geo.com) and 
+[Bayesian Improved Surname Geocoding](BISG.com)
 
-From here we can begin conducting ecological inference.
+We know the number of votes cast for each candidate and by each racial/ethnic 
+group. From this data, we want to learn whether voters from different ethnic
+groups prefer different candidates. 
+
+## Preparing the data
+
+First, we need to clean and prepare the data. `eiCompare` contains functions to
+streamline data preparation and prevent common errors that emerge during this 
+process.
+
+First, let's set up our column vectors. Most `eiCompare` functions for ecological inference require these as parameters.
 
 ```{r}
-nrow(oc)
+cands <- c("kemp", "abrams", "metz")
+races <- c("white", "black", "hispanic", "other")
+total <- "turnout"
+id <- "precinct"
+```
+
+We start by using `dedupe_precincts()` to check that the data does not contain any 
+duplicate precincts.
+
+```{r}
+gwinnett <- dedupe_precincts(
+  data = gwinnett,
+  id_cols = id
+)
+```
+We got a warning indicating that some rows of the data do appear to belong to 
+the same precinct. The function returned a column identifying problematic
+rows. Let's take a look at these.
+
+```{r}
+gwinnett %>%
+  filter(duplicate)
+```
+
+Here we see that precinct `035` appears to have entered the data twice. This anomaly has at least two possible explanations:
+
+1. For most elections, precincts report their own results and data entry is often done by hand. This can lead to small mistakes like a precincts' vote tallies being split over two columns.
+
+2. Election results databases typically contain the resutls of many elections that took place in different jurisdictions and at different times. Often when extracting the results of a particular election, one might accidentally extract some results from other elections, leading to repeated precinct IDs. 
+
+In this case, we have confidence that this duplicate has emerged through an error in the precinct reporting. We can combine the two columns using this code:
+
+```{r}
+missing_inds <- which(gwinnett$duplicate)
+columns_to_add <- c(total, cands)
+gwinnett[missing_inds[1], columns_to_add] <-
+  gwinnett[missing_inds[1], columns_to_add] +
+  gwinnett[missing_inds[2], columns_to_add]
+gwinnett <- gwinnett[-missing_inds[2]]
+gwinnett[missing_ids[1], ]
+```
+Now we see the vote totals from the previous two columns have been summed together in this new row. We can double check that this eliminated all duplicates be rerunning `dedupe_precints()`
+
+```{r}
+gwinnett <- dedupe_precincts(
+  data = gwinnett,
+  id_cols = id
+)
+```
+
+
+
+
+```{r}
+
 ```
 
 We have this information for the forty four precincts in the county. 
