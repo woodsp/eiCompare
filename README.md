@@ -5,8 +5,7 @@
 eiCompare development version
 
 This package helps analysts with Ecological Inference and RxC analysis, to produce plots and tables. 
-The goal is to assist people doing voter redistricting work. Please contact me with any questions, I update the package 
-every few months as new suggestions, bugs emerge.
+The goal is to assist people doing voter redistricting work.
 
 ## Development
 
@@ -42,3 +41,6 @@ Now push your changes to github and create a PR from https://github.com/DSSG-eiC
 ```
 git push --set-upstream origin newfeature 
 ```
+
+## Continuous integration
+This project uses [GitHub Actions](https://docs.github.com/en/actions) for continuous integration. Workflows are run for every commit unless the commit message starts with '[skip-ci]'. For example `git commit -a -m "[skip-ci] added section to readme"`.
