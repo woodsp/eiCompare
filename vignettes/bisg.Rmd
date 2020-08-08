@@ -1,0 +1,469 @@
+---
+title: "Bayesian Improved Surname Geocoding (BISG)"
+author: "null"
+date: "8/5/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+This vignette demonstrates how to perform Bayesian Improved Surname Geocoding when the race/ethncity of individuals are unknown within a dataset.
+
+## *What is Bayesian Improved Surname Geocoding?*
+
+Bayesian Improved Surname Geocoding (BISG) is a method that applies the Bayes Rule/Theorem to predict the race/ethnicity of an individual using the individual's surname and geocoded location [Elliott et. al 2008, Elliot et al. 2009, Imai and Khanna 2016]. 
+
+Specifically, BISG first calculates the prior probability of **i** individual being of a ceratin **r** racial group given their **s** surname, or p(r~i~|s~i~). The prior probability created from the surname is then updated with the probability of the **i** individual living in a **g** geographic location belonging to a *r* racial group, or p(g~i~|r~i~). The following equation describes how BISG calculates race/ethnicity of individuals using Bayes Theorem, given the surname and geographic location, and specifically when race/ethncicty is unknown :
+      
+
+      ![BISG Equation for Predicting Race/Ethnicity.]/github/eiCompare/vignettes/bisg_equation.png
+
+In R, the package that performs BISG is called, WRU: Who Are You `wru` [cite WRU package]. This vignette will walk you through how to prepare your geocoded voter file for performing BISG by stepping you throught the processing of cleaning your voter file, prepping voter data for running the BISG, and finally, performing BISG to obtain racial/ethnic probailities of individuals in a voter file.
+
+## *Performing BISG on your data*
+We will perform BISG using the previous Gwinnett and Fulton county voter registration data called `gwin_fulton_5k.csv` that was geocoded in the **eiCompare: Geocoding vignette**. 
+
+The first step in performing BISG is to geocode your voter file addresses. For information on geocoding, visit the Geocoding Vignette. 
+
+Let's begin by loading your geocoded voter data into R/RStudio.
+
+### Step 1: Load R libraries/packages, voter file, and census data
+
+Load the R packages needed to perform BISG. If you have not already downloaded the following packages, please install these packages.
+```{r}
+# Load libraries/packages
+
+suppressMessages(c(
+  library(devtools),
+  library(tidyverse),
+  library(stringr),
+  library(sf),
+  library(eiCompare),
+  library(wru),
+  library(readr)
+))
+```
+
+Load in East Ramapo, NY School District voter registation data.
+```{r}
+# Load geocoded voter registration file
+voter_file_geocoded <- read_csv("~/shared/BISG_datasets/gwin_fulton_5k.csv")
+```
+
+Obtain the first six rows of the voter file to check that the file has downloaded properly.
+```{r}
+# Check the first six rows of the voter file
+head(voter_file_geocoded, 6)
+```
+
+View the column names of the voter file. Some of these columns will be used along the journey to performing BISG.
+```{r}
+# Find out names of columns in voter file
+names(voter_file_geocoded)
+```
+
+Check the dimensions (the number of rows and columns) of the voter file.
+```{r}
+# Get the dimensions of the voter file
+dim(voter_file_geocoded)
+```
+There are  voters (or observations) and  columns in the voter file.
+
+Make sure to load your census data that details certain geographies (i.e. counties, cities, tracts, blocks, etc.)
+```{r}
+# Load New York census data
+load("~/shared/east_ramapo/data/ny_census2.RData")
+census_data <- ny_3
+```
+
+Next, load the state shape file using the sf::st_read() function.
+```{r}
+# Load New York block shape file
+ny_shape <- st_read("~/shared/east_ramapo/data/tl_2014_36_tabblock10.shp")
+```
+
+
+### Step 2: De-duplicate the voter file.
+
+The next step involves removing duplicate voter IDs from the voter file, using the `dedupe_voter_file` function. Check the column name for the unique identifier assigned to each voter the voter file. For the East Ramapo voter file we are using, voter_id is the column named `id`.
+
+```{r}
+# Remove duplicate voter IDs (the unique identifier for each voter)
+voter_file_geocoded <- dedupe_voter_file(voter_file = voter_file_geocoded, voter_id = "voter_id")
+
+# Check new dimensions of voter file after removing duplicate voter IDs
+dim(voter_file_geocoded)
+```
+There are no duplicate voter IDs in the dataset for the East Ramapo school district data set.
+
+### Step 3: Merge voter file and shape files. This function may take a minute to complete.
+```{r}
+# Load shape file
+voter_shape_merged <- merge_voter_file_to_shape(
+  voter_file = voter_file_geocoded,
+  shape_file = ny_shape,
+  crs = "+proj=longlat +ellps=GRS80",
+  coords = c("lon", "lat"),
+  voter_id = "voter_id"
+)
+
+# Check first 6 rows of merged voter file.
+head(voter_shape_merged, 6)
+```
+```{r}
+# Obtain dimensions of merged file.
+dim(voter_shape_merged)
+```
+
+```{r}
+# Get column names of merged file.
+names(voter_shape_merged)
+```
+
+
+### Step 4: Extracting necessary columns from the voter file to perform BISG
+The voter file contains lots of information about the voter. However, all information is not needed and some columns like voter ID and state.
+
+```{r}
+voter_file_to_bisg <- tidy_voter_file_wru(
+  voter_file = voter_shape_merged,
+  voter_id = "voter_id",
+  surname = "last_name",
+  state = "STATEFP10",
+  county = "COUNTYFP10",
+  tract = "TRACTCE10",
+  block = "BLOCKCE10"
+)
+
+# Check the first 6 rows of the voter_file_to_bisg
+head(voter_file_to_bisg, 6)
+```
+```{r}
+dim(voter_file_to_bisg)
+
+# Get column names for the voter file that is now prepped to perform BISG.
+names(voter_file_to_bisg)
+```
+
+### Step 5: Perform BISG and obtain the predicted race/ethnicity of each voter.
+```{r}
+# Convert the voter_shaped_merged file into a data frame for performing BISG.
+voter_file_complete <- as.data.frame(voter_shape_merged)
+class(voter_file_complete)
+```
+
+```{r}
+# Perform BISG
+bisg_file <- eiCompare::wru_predict_race_wrapper(
+  voter_file = voter_file_complete,
+  census_data = census_data,
+  voter_id = "voter_id",
+  surname = "last_name",
+  state = "NY",
+  county = "COUNTYFP10",
+  tract = "TRACTCE10",
+  block = "BLOCKCE10",
+  census_geo = "block",
+  use_surname = TRUE,
+  surname_only = FALSE,
+  surname_year = 2010,
+  use_age = FALSE,
+  use_sex = FALSE,
+  return_surname_flag = TRUE,
+  return_geocode_flag = TRUE,
+  verbose = TRUE
+)
+summary(bisg_file$bisg)
+```
+The BISG voter data.frame is now split into two tables `bisg_file$voter_file` and `bisg$bisg`. The racial proportions for every indidivual given their last name and location is generated and can now be used to perform ecological inference using eiCompare.
+
+
+Now, let's do some visualizations with our estimated BISG data.
+
+```{r}
+# BISG Summary, excluding unknown voters
+bisg_by_county_exclude_unknown <- bisg$bisg %>%
+  dplyr::filter(voter_file_final$RACE != "U") %>%
+  dplyr::group_by(county) %>%
+  dplyr::summarise(
+    whi = mean(pred.whi),
+    bla = mean(pred.bla),
+    his = mean(pred.his),
+    asi = mean(pred.asi),
+    oth = mean(pred.oth),
+    .groups = "drop"
+  )
+```
+
+```{r}
+# BISG Summary, including unknown voters
+bisg_by_county_include_unknown <- bisg$bisg %>%
+  dplyr::group_by(county) %>%
+  dplyr::summarise(
+    whi = mean(pred.whi),
+    bla = mean(pred.bla),
+    his = mean(pred.his),
+    asi = mean(pred.asi),
+    oth = mean(pred.oth),
+    .groups = "drop"
+  )
+```
+
+```{r}
+## Ground Truth
+voter_file_final$whi <- as.numeric(voter_file_final$RACE == "WH")
+voter_file_final$bla <- as.numeric(voter_file_final$RACE == "BH")
+voter_file_final$his <- as.numeric(voter_file_final$RACE == "HP")
+voter_file_final$asi <- as.numeric(voter_file_final$RACE == "AP")
+voter_file_final$oth <- as.numeric(voter_file_final$RACE == "OT" |
+  voter_file_final$RACE == "AI")
+
+true_race_county <- as.data.frame(voter_file_final) %>%
+  dplyr::filter(RACE != "U") %>%
+  dplyr::group_by(COUNTYFP10) %>%
+  dplyr::summarise(
+    whi = mean(whi),
+    bla = mean(bla),
+    his = mean(his),
+    asi = mean(asi),
+    oth = mean(oth),
+    .groups = "drop"
+  )
+```
+
+```{r}
+## CVAP Predictions
+cvap_path <- file.path("~/shared/BISG_datasets/georgia_cvap_acs5_2018.csv")
+cvap <- read.csv(cvap_path)
+cvap$total <- rowSums(cvap[, c("WH", "BL", "AIAN", "AS", "NHOPI", "MULTI", "HL")])
+cvap$whi <- cvap$WH / cvap$total
+cvap$bla <- cvap$BL / cvap$total
+cvap$his <- cvap$HL / cvap$total
+cvap$asi <- cvap$AS / cvap$total
+cvap$oth <- (cvap$AIAN + cvap$NHOPI + cvap$MULTI) / cvap$total
+```
+
+```{r}
+### Plots
+final_results <- data.frame(
+  county = bisg_by_county_exclude_unknown$county,
+  whi_true = true_race_county$whi,
+  whi_bisg = bisg_by_county_exclude_unknown$whi,
+  whi_cvap = cvap$whi,
+  bla_true = true_race_county$bla,
+  bla_bisg = bisg_by_county_exclude_unknown$bla,
+  bla_cvap = cvap$bla,
+  his_true = true_race_county$his,
+  his_bisg = bisg_by_county_exclude_unknown$his,
+  his_cvap = cvap$his,
+  asi_true = true_race_county$asi,
+  asi_bisg = bisg_by_county_exclude_unknown$asi,
+  asi_cvap = cvap$asi,
+  oth_true = true_race_county$oth,
+  oth_bisg = bisg_by_county_exclude_unknown$oth,
+  oth_cvap = cvap$oth
+)
+```
+
+```{r}
+### Correlations
+print(paste("White BISG vs. True: ", cor(final_results$whi_bisg, final_results$whi_true)))
+print(paste("White CVAP vs. True: ", cor(final_results$whi_cvap, final_results$whi_true)))
+
+print(paste("Black BISG vs. True: ", cor(final_results$bla_bisg, final_results$bla_true)))
+print(paste("Black CVAP vs. True: ", cor(final_results$bla_cvap, final_results$bla_true)))
+
+print(paste("Hispanic/Latino BISG vs. True: ", cor(final_results$his_bisg, final_results$his_true)))
+print(paste("Hispanic/Latino CVAP vs. True: ", cor(final_results$his_cvap, final_results$his_true)))
+
+print(paste("Asian BISG vs. True: ", cor(final_results$asi_bisg, final_results$asi_true)))
+print(paste("Asian CVAP vs. True: ", cor(final_results$asi_cvap, final_results$asi_true)))
+
+print(paste("Other BISG vs. True: ", cor(final_results$oth_bisg, final_results$oth_true)))
+print(paste("Other CVAP vs. True: ", cor(final_results$oth_cvap, final_results$oth_true)))
+```
+
+### Scatterplots
+```{r}
+plot_whi <- ggplot(data = final_results) +
+  geom_point(aes(x = whi_true, y = whi_bisg), color = "black", size = 3, alpha = 0.2) +
+  geom_point(aes(x = whi_true, y = whi_cvap), color = "red", size = 3, alpha = 0.2) +
+  geom_smooth(aes(x = whi_true, y = whi_bisg),
+    method = "lm",
+    formula = y ~ x,
+    color = "black",
+    lwd = 2,
+    se = FALSE
+  ) +
+  geom_smooth(aes(x = whi_true, y = whi_cvap),
+    method = "lm",
+    formula = y ~ x,
+    color = "red",
+    lwd = 2,
+    se = FALSE
+  ) +
+  geom_abline(intercept = 0, slope = 1, color = "grey", lwd = 2) +
+  xlim(0, 1) +
+  ylim(0, 1) +
+  xlab("Observed Fraction") +
+  ylab("Estimated Fraction (BISG)") +
+  ggtitle("Fraction White by County\n(Georgia 2018)") +
+  theme_bw() +
+  theme(
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 23, face = "bold"),
+    axis.title.x = element_text(margin = margin(t = 20)),
+    axis.title.y = element_text(margin = margin(r = 20)),
+    plot.title = element_text(size = 27, face = "bold", hjust = 0.5)
+  ) +
+  coord_fixed()
+```
+
+```{r}
+plot_bla <- ggplot(data = final_results) +
+  geom_point(aes(x = bla_true, y = bla_bisg), color = "black", size = 3, alpha = 0.2) +
+  geom_point(aes(x = bla_true, y = bla_cvap), color = "red", size = 3, alpha = 0.2) +
+  geom_abline(intercept = 0, slope = 1, color = "grey", lwd = 2) +
+  geom_smooth(aes(x = bla_true, y = bla_bisg),
+    method = "lm",
+    formula = y ~ x,
+    color = "black",
+    lwd = 2,
+    se = FALSE
+  ) +
+  geom_smooth(aes(x = bla_true, y = bla_cvap),
+    method = "lm",
+    formula = y ~ x,
+    color = "red",
+    lwd = 2,
+    se = FALSE
+  ) +
+  xlim(0, 1) +
+  ylim(0, 1) +
+  xlab("Observed Fraction") +
+  ylab("Estimated Fraction (BISG)") +
+  ggtitle("Fraction Black by County\n(Georgia 2018)") +
+  theme_bw() +
+  theme(
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 23, face = "bold"),
+    axis.title.x = element_text(margin = margin(t = 20)),
+    axis.title.y = element_text(margin = margin(r = 20)),
+    plot.title = element_text(size = 27, face = "bold", hjust = 0.5)
+  ) +
+  coord_fixed()
+```
+
+```{r}
+plot_his <- ggplot(data = final_results) +
+  geom_point(aes(x = his_true, y = his_bisg), color = "black", size = 3, alpha = 0.2) +
+  geom_point(aes(x = his_true, y = his_cvap), color = "red", size = 3, alpha = 0.2) +
+  geom_smooth(aes(x = his_true, y = his_bisg),
+    method = "lm",
+    formula = y ~ x,
+    color = "black",
+    lwd = 2,
+    se = FALSE
+  ) +
+  geom_smooth(aes(x = his_true, y = his_cvap),
+    method = "lm",
+    formula = y ~ x,
+    color = "red",
+    lwd = 2,
+    se = FALSE
+  ) +
+  geom_abline(intercept = 0, slope = 1, color = "grey", lwd = 2) +
+  xlim(0, 0.15) +
+  ylim(0, 0.15) +
+  xlab("Observed Fraction") +
+  ylab("Estimated Fraction (BISG)") +
+  ggtitle("Fraction Hispanic by County\n(Georgia 2018)") +
+  theme_bw() +
+  theme(
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 23, face = "bold"),
+    axis.title.x = element_text(margin = margin(t = 20)),
+    axis.title.y = element_text(margin = margin(r = 20)),
+    plot.title = element_text(size = 27, face = "bold", hjust = 0.5)
+  ) +
+  coord_fixed()
+```
+
+```{r}
+plot_asi <- ggplot(data = final_results) +
+  geom_point(aes(x = asi_true, y = asi_bisg), color = "black", size = 3, alpha = 0.2) +
+  geom_point(aes(x = asi_true, y = asi_cvap), color = "red", size = 3, alpha = 0.2) +
+  geom_abline(intercept = 0, slope = 1, color = "grey", lwd = 2) +
+  geom_smooth(aes(x = asi_true, y = asi_bisg),
+    method = "lm",
+    formula = y ~ x,
+    color = "black",
+    lwd = 2,
+    se = FALSE
+  ) +
+  geom_smooth(aes(x = asi_true, y = asi_cvap),
+    method = "lm",
+    formula = y ~ x,
+    color = "red",
+    lwd = 2,
+    se = FALSE
+  ) +
+  xlim(0, 0.05) +
+  ylim(0, 0.05) +
+  xlab("Observed Fraction") +
+  ylab("Estimated Fraction (BISG)") +
+  ggtitle("Fraction Asian by County\n(Georgia 2018)") +
+  theme_bw() +
+  theme(
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 23, face = "bold"),
+    axis.title.x = element_text(margin = margin(t = 20)),
+    axis.title.y = element_text(margin = margin(r = 20)),
+    plot.title = element_text(size = 27, face = "bold", hjust = 0.5)
+  ) +
+  coord_fixed()
+```
+
+```{r}
+plot_oth <- ggplot(data = final_results) +
+  geom_point(aes(x = oth_true, y = oth_bisg), color = "black", size = 3, alpha = 0.2) +
+  geom_point(aes(x = oth_true, y = oth_cvap), color = "red", size = 3, alpha = 0.2) +
+  geom_abline(intercept = 0, slope = 1, color = "grey", lwd = 2) +
+  geom_smooth(aes(x = oth_true, y = oth_bisg, color = "BISG"),
+    method = "lm",
+    formula = y ~ x,
+    lwd = 2,
+    se = FALSE
+  ) +
+  geom_smooth(aes(x = oth_true, y = oth_cvap, color = "CVAP"),
+    method = "lm",
+    formula = y ~ x,
+    lwd = 2,
+    se = FALSE
+  ) +
+  xlim(0, 0.05) +
+  ylim(0, 0.05) +
+  xlab("Observed Fraction") +
+  ylab("Estimated Fraction (BISG)") +
+  labs(color = "Method") +
+  ggtitle("Fraction Other by County\n(Georgia 2018)") +
+  scale_color_manual(values = c("CVAP" = "red", "BISG" = "black")) +
+  theme_bw() +
+  theme(
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 23, face = "bold"),
+    axis.title.x = element_text(margin = margin(t = 20)),
+    axis.title.y = element_text(margin = margin(r = 20)),
+    plot.title = element_text(size = 27, face = "bold", hjust = 0.5),
+    legend.key.size = unit(2, "cm"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20)
+  ) +
+  coord_fixed()
+```
+
+```{r}
+options(repr.plot.width = 22, repr.plot.height = 20)
+plot_whi + plot_bla + plot_his + plot_asi + plot_oth + plot_layout(nrow = 2, byrow = TRUE)
+```
+
+### Choropleth Map
